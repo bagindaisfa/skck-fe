@@ -1,11 +1,20 @@
-import React from 'react';
-import { Form, Input, Select, DatePicker, Upload, Button, Row, Col } from 'antd';
-import { UploadOutlined, UserOutlined, IdcardOutlined, HomeOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { Form, Input, Select, DatePicker, Upload, message, Row, Col } from 'antd';
+import { PlusOutlined, LoadingOutlined, UserOutlined, IdcardOutlined, HomeOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
 
 const { Option } = Select;
 const { TextArea } = Input;
 
+const getBase64 = (img, callback) => {
+  const reader = new FileReader();
+  reader.addEventListener('load', () => callback(reader.result));
+  reader.readAsDataURL(img);
+};
+
 const Step1 = ({ form }) => {
+  const [messageApi, contextHolder] = message.useMessage();
+  const [loading, setLoading] = useState(false);
+  const [imageUrl, setImageUrl] = useState();
   const normFile = (e) => {
     if (Array.isArray(e)) {
       return e;
@@ -13,274 +22,370 @@ const Step1 = ({ form }) => {
     return e?.fileList;
   };
 
+  const handleChange = async (info) => {
+  const file = info.file.originFileObj || info.file;
+
+  if (file instanceof File) {
+    try {
+      setLoading(true);
+      await validateRedBackground(file);
+      getBase64(file, (url) => {
+        setLoading(false);
+        setImageUrl(url);
+      });
+    } catch (err) {
+      setLoading(false);
+      messageApi.error(err);
+      setImageUrl(null); // reset kalau gagal
+    }
+  }
+};
+
+  const beforeUpload = (file) => {
+  const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
+  if (!isJpgOrPng) {
+    messageApi.error('Hanya file JPG/PNG yang diperbolehkan!');
+    return Upload.LIST_IGNORE;
+  }
+  const isLt2M = file.size / 1024 / 1024 < 2;
+  if (!isLt2M) {
+    messageApi.error('Ukuran gambar harus di bawah 2MB!');
+    return Upload.LIST_IGNORE;
+  }
+  return false; // <— penting, agar file tetap masuk ke daftar
+};
+
+  const uploadButton = (
+    <button style={{ border: 0, background: 'none' }} type="button">
+      {loading ? <LoadingOutlined /> : <PlusOutlined />}
+      <div style={{ marginTop: 8, color: 'darkgray' }}>Unggah Foto</div>
+    </button>
+  );
+
+  // Mengecek apakah background foto dominan merah
+const validateRedBackground = (file) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.src = e.target.result;
+    };
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+
+      const imageData = ctx.getImageData(0, 0, img.width, img.height).data;
+
+      let totalR = 0, totalG = 0, totalB = 0;
+      const sampleStep = 10; // ambil setiap 10 pixel biar ringan
+
+      for (let i = 0; i < imageData.length; i += 4 * sampleStep) {
+        totalR += imageData[i];
+        totalG += imageData[i + 1];
+        totalB += imageData[i + 2];
+      }
+
+      const avgR = totalR / (imageData.length / (4 * sampleStep));
+      const avgG = totalG / (imageData.length / (4 * sampleStep));
+      const avgB = totalB / (imageData.length / (4 * sampleStep));
+
+      console.log('Rata-rata warna:', { avgR, avgG, avgB });
+
+      // threshold dasar: merah harus paling dominan dan cukup kuat
+      if (avgR > 120 && avgR > avgG * 1.4 && avgR > avgB * 1.4) {
+        resolve(true); // background merah
+      } else {
+        reject('Latar belakang foto harus berwarna merah');
+      }
+    };
+
+    img.onerror = () => reject('Gagal membaca gambar');
+    reader.readAsDataURL(file);
+  });
+};
+
+
   return (
-    <div className="step-content">
-      <div className="form-section">
-        <h3 className="form-section-title">Data Pribadi</h3>
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              name="photo"
-              label="Foto"
-              valuePropName="fileList"
-              getValueFromEvent={normFile}
-              rules={[{ required: true, message: 'Harap unggah foto' }]}
-            >
-              <Upload
+    <>
+      {contextHolder}
+      <div className="step-content">
+        <div className="form-section">
+          <h3 className="form-section-title">Data Pribadi</h3>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
                 name="photo"
-                listType="picture-card"
-                className="photo-upload"
-                beforeUpload={() => false}
-                maxCount={1}
+                label="Foto"
+                valuePropName="fileList"
+                getValueFromEvent={normFile}
+                rules={[{ required: true, message: 'Harap unggah foto' }]}
               >
-                <div>
-                  <UploadOutlined />
-                  <div style={{ marginTop: 8 }}>Unggah Foto</div>
-                </div>
-              </Upload>
-            </Form.Item>
-          </Col>
-          <Col span={16}>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="nik"
-                  label="NIK"
-                  rules={[{ required: true, message: 'Harap masukkan NIK' }]}
+                <Upload
+                  showUploadList={false}
+                  name="photo"
+                  listType="picture-card"
+                  className="photo-upload"
+                  beforeUpload={beforeUpload}
+                  onChange={handleChange}
+                  maxCount={1}
+                  
                 >
-                  <Input
-                    prefix={<IdcardOutlined />}
-                    placeholder="Nomor Induk Kependudukan"
-                    maxLength={16}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="kkNumber"
-                  label="No. KK"
-                  rules={[{ required: true, message: 'Harap masukkan No. KK' }]}
-                >
-                  <Input
-                    prefix={<IdcardOutlined />}
-                    placeholder="Nomor Kartu Keluarga"
-                    maxLength={16}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+                  {imageUrl ? (
+                    <img draggable={false} src={imageUrl} alt="avatar" style={{ width: '100%',height: '100%' }} />
+                  ) : (
+                    uploadButton
+                  )}
+                </Upload>
+              </Form.Item>
+            </Col>
+            <Col span={16}>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="nik"
+                    label="NIK"
+                    rules={[{ required: true, message: 'Harap masukkan NIK' }]}
+                  >
+                    <Input
+                      prefix={<IdcardOutlined />}
+                      placeholder="Nomor Induk Kependudukan"
+                      maxLength={16}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="kkNumber"
+                    label="No. KK"
+                    rules={[{ required: true, message: 'Harap masukkan No. KK' }]}
+                  >
+                    <Input
+                      prefix={<IdcardOutlined />}
+                      placeholder="Nomor Kartu Keluarga"
+                      maxLength={16}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Form.Item
-              name="fullName"
-              label="Nama Lengkap"
-              rules={[{ required: true, message: 'Harap masukkan nama lengkap' }]}
-            >
-              <Input
-                prefix={<UserOutlined />}
-                placeholder="Nama Lengkap Sesuai KTP"
-              />
-            </Form.Item>
+              <Form.Item
+                name="fullName"
+                label="Nama Lengkap"
+                rules={[{ required: true, message: 'Harap masukkan nama lengkap' }]}
+              >
+                <Input
+                  prefix={<UserOutlined />}
+                  placeholder="Nama Lengkap Sesuai KTP"
+                />
+              </Form.Item>
 
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item
-                  name="placeOfBirth"
-                  label="Tempat Lahir"
-                  rules={[{ required: true, message: 'Harap masukkan tempat lahir' }]}
-                >
-                  <Input placeholder="Tempat Lahir" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="dateOfBirth"
-                  label="Tanggal Lahir"
-                  rules={[{ required: true, message: 'Harap pilih tanggal lahir' }]}
-                >
-                  <DatePicker
-                    style={{ width: '100%' }}
-                    placeholder="Pilih Tanggal"
-                    format="DD/MM/YYYY"
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="gender"
-                  label="Jenis Kelamin"
-                  rules={[{ required: true, message: 'Harap pilih jenis kelamin' }]}
-                >
-                  <Select placeholder="Pilih Jenis Kelamin">
-                    <Option value="male">Laki-laki</Option>
-                    <Option value="female">Perempuan</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="placeOfBirth"
+                    label="Tempat Lahir"
+                    rules={[{ required: true, message: 'Harap masukkan tempat lahir' }]}
+                  >
+                    <Input placeholder="Tempat Lahir" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="dateOfBirth"
+                    label="Tanggal Lahir"
+                    rules={[{ required: true, message: 'Harap pilih tanggal lahir' }]}
+                  >
+                    <DatePicker
+                      style={{ width: '100%' }}
+                      placeholder="Pilih Tanggal"
+                      format="DD/MM/YYYY"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="gender"
+                    label="Jenis Kelamin"
+                    rules={[{ required: true, message: 'Harap pilih jenis kelamin' }]}
+                  >
+                    <Select placeholder="Pilih Jenis Kelamin">
+                      <Option value="male">Laki-laki</Option>
+                      <Option value="female">Perempuan</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Form.Item
-              name="address"
-              label="Alamat Lengkap"
-              rules={[{ required: true, message: 'Harap masukkan alamat lengkap' }]}
-            >
-              <TextArea
-                rows={3}
-                prefix={<HomeOutlined />}
-                placeholder="Alamat Sesuai KTP"
-              />
-            </Form.Item>
+              <Form.Item
+                name="address"
+                label="Alamat Lengkap"
+                rules={[{ required: true, message: 'Harap masukkan alamat lengkap' }]}
+              >
+                <TextArea
+                  rows={3}
+                  prefix={<HomeOutlined />}
+                  placeholder="Alamat Sesuai KTP"
+                />
+              </Form.Item>
 
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item
-                  name="province"
-                  label="Provinsi"
-                  rules={[{ required: true, message: 'Harap pilih provinsi' }]}
-                >
-                  <Select placeholder="Pilih Provinsi" showSearch>
-                    <Option value="jawaBarat">Jawa Barat</Option>
-                    <Option value="jawaTengah">Jawa Tengah</Option>
-                    <Option value="jawaTimur">Jawa Timur</Option>
-                    {/* Add more provinces as needed */}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="city"
-                  label="Kota/Kabupaten"
-                  rules={[{ required: true, message: 'Harap pilih kota/kabupaten' }]}
-                >
-                  <Select placeholder="Pilih Kota/Kabupaten" showSearch>
-                    <Option value="bandung">Kota Bandung</Option>
-                    <Option value="cimahi">Kota Cimahi</Option>
-                    {/* Add more cities as needed */}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="subdistrict"
-                  label="Kecamatan"
-                  rules={[{ required: true, message: 'Harap pilih kecamatan' }]}
-                >
-                  <Select placeholder="Pilih Kecamatan" showSearch>
-                    <Option value="cimahiSelatan">Cimahi Selatan</Option>
-                    <Option value="cimahiTengah">Cimahi Tengah</Option>
-                    <Option value="cimahiUtara">Cimahi Utara</Option>
-                    {/* Add more subdistricts as needed */}
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="province"
+                    label="Provinsi"
+                    rules={[{ required: true, message: 'Harap pilih provinsi' }]}
+                  >
+                    <Select placeholder="Pilih Provinsi" showSearch>
+                      <Option value="jawaBarat">Jawa Barat</Option>
+                      <Option value="jawaTengah">Jawa Tengah</Option>
+                      <Option value="jawaTimur">Jawa Timur</Option>
+                      {/* Add more provinces as needed */}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="city"
+                    label="Kota/Kabupaten"
+                    rules={[{ required: true, message: 'Harap pilih kota/kabupaten' }]}
+                  >
+                    <Select placeholder="Pilih Kota/Kabupaten" showSearch>
+                      <Option value="bandung">Kota Bandung</Option>
+                      <Option value="cimahi">Kota Cimahi</Option>
+                      {/* Add more cities as needed */}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="subdistrict"
+                    label="Kecamatan"
+                    rules={[{ required: true, message: 'Harap pilih kecamatan' }]}
+                  >
+                    <Select placeholder="Pilih Kecamatan" showSearch>
+                      <Option value="cimahiSelatan">Cimahi Selatan</Option>
+                      <Option value="cimahiTengah">Cimahi Tengah</Option>
+                      <Option value="cimahiUtara">Cimahi Utara</Option>
+                      {/* Add more subdistricts as needed */}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item
-                  name="village"
-                  label="Kelurahan/Desa"
-                  rules={[{ required: true, message: 'Harap pilih kelurahan/desa' }]}
-                >
-                  <Input placeholder="Nama Kelurahan/Desa" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="kode_pos"
-                  label="Kode Pos"
-                  rules={[{ required: true, message: 'Harap masukkan RT' }]}
-                >
-                  <Input type="number" placeholder="Kode Pos" maxLength={5} />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="rt_rw"
-                  label="RT/RW"
-                  rules={[{ required: true, message: 'Harap masukkan RW' }]}
-                >
-                  <Input placeholder="01/02" maxLength={7} />
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="village"
+                    label="Kelurahan/Desa"
+                    rules={[{ required: true, message: 'Harap pilih kelurahan/desa' }]}
+                  >
+                    <Input placeholder="Nama Kelurahan/Desa" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="kode_pos"
+                    label="Kode Pos"
+                    rules={[{ required: true, message: 'Harap masukkan RT' }]}
+                  >
+                    <Input type="number" placeholder="Kode Pos" maxLength={5} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="rt_rw"
+                    label="RT/RW"
+                    rules={[{ required: true, message: 'Harap masukkan RW' }]}
+                  >
+                    <Input placeholder="01/02" maxLength={7} />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="phoneNumber"
-                  label="No. HP/Telepon"
-                  rules={[{ required: true, message: 'Harap masukkan nomor telepon' }]}
-                >
-                  <Input
-                    prefix={<PhoneOutlined />}
-                    placeholder="Nomor yang dapat dihubungi"
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="email"
-                  label="Email"
-                  rules={[
-                    { type: 'email', message: 'Format email tidak valid' },
-                    { required: true, message: 'Harap masukkan email' }
-                  ]}
-                >
-                  <Input
-                    prefix={<MailOutlined />}
-                    placeholder="Alamat email aktif"
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="phoneNumber"
+                    label="No. HP/Telepon"
+                    rules={[{ required: true, message: 'Harap masukkan nomor telepon' }]}
+                  >
+                    <Input
+                      prefix={<PhoneOutlined />}
+                      placeholder="Nomor yang dapat dihubungi"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="email"
+                    label="Email"
+                    rules={[
+                      { type: 'email', message: 'Format email tidak valid' },
+                      { required: true, message: 'Harap masukkan email' }
+                    ]}
+                  >
+                    <Input
+                      prefix={<MailOutlined />}
+                      placeholder="Alamat email aktif"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Form.Item
-              name="religion"
-              label="Agama"
-              rules={[{ required: true, message: 'Harap pilih agama' }]}
-            >
-              <Select placeholder="Pilih Agama">
-                <Option value="islam">Islam</Option>
-                <Option value="kristen">Kristen Protestan</Option>
-                <Option value="katolik">Katolik</Option>
-                <Option value="hindu">Hindu</Option>
-                <Option value="buddha">Buddha</Option>
-                <Option value="konghucu">Konghucu</Option>
-              </Select>
-            </Form.Item>
+              <Form.Item
+                name="religion"
+                label="Agama"
+                rules={[{ required: true, message: 'Harap pilih agama' }]}
+              >
+                <Select placeholder="Pilih Agama">
+                  <Option value="islam">Islam</Option>
+                  <Option value="kristen">Kristen Protestan</Option>
+                  <Option value="katolik">Katolik</Option>
+                  <Option value="hindu">Hindu</Option>
+                  <Option value="buddha">Buddha</Option>
+                  <Option value="konghucu">Konghucu</Option>
+                </Select>
+              </Form.Item>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="maritalStatus"
-                  label="Status Perkawinan"
-                  rules={[{ required: true, message: 'Harap pilih status perkawinan' }]}
-                >
-                  <Select placeholder="Pilih Status">
-                    <Option value="single">Belum Kawin</Option>
-                    <Option value="married">Kawin</Option>
-                    <Option value="divorced">Cerai Hidup</Option>
-                    <Option value="widowed">Cerai Mati</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="citizenship"
-                  label="Kewarganegaraan"
-                  rules={[{ required: true, message: 'Harap pilih kewarganegaraan' }]}
-                >
-                  <Select placeholder="Pilih Kewarganegaraan">
-                    <Option value="wni">WNI</Option>
-                    <Option value="wna">WNA</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-          </Col>
-        </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="maritalStatus"
+                    label="Status Perkawinan"
+                    rules={[{ required: true, message: 'Harap pilih status perkawinan' }]}
+                  >
+                    <Select placeholder="Pilih Status">
+                      <Option value="single">Belum Kawin</Option>
+                      <Option value="married">Kawin</Option>
+                      <Option value="divorced">Cerai Hidup</Option>
+                      <Option value="widowed">Cerai Mati</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="citizenship"
+                    label="Kewarganegaraan"
+                    rules={[{ required: true, message: 'Harap pilih kewarganegaraan' }]}
+                  >
+                    <Select placeholder="Pilih Kewarganegaraan">
+                      <Option value="wni">WNI</Option>
+                      <Option value="wna">WNA</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Col>
+          </Row>
+        </div>
       </div>
-    </div>
+    </>
+    
   );
 };
 
