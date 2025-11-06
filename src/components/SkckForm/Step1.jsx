@@ -186,20 +186,20 @@ const Step1 = ({ form }) => {
               </Col>
               <Col span={8}>
                 <Form.Item
-                  name="rt"
-                  label="RT"
+                  name="kode_pos"
+                  label="Kode Pos"
                   rules={[{ required: true, message: 'Harap masukkan RT' }]}
                 >
-                  <Input placeholder="RT" maxLength={3} />
+                  <Input type="number" placeholder="Kode Pos" maxLength={5} />
                 </Form.Item>
               </Col>
               <Col span={8}>
                 <Form.Item
-                  name="rw"
-                  label="RW"
+                  name="rt_rw"
+                  label="RT/RW"
                   rules={[{ required: true, message: 'Harap masukkan RW' }]}
                 >
-                  <Input placeholder="RW" maxLength={3} />
+                  <Input placeholder="01/02" maxLength={7} />
                 </Form.Item>
               </Col>
             </Row>
